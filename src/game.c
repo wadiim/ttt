@@ -4,25 +4,35 @@
 #include <ctype.h>
 #include <string.h>
 
+void init_game(Game *game)
+{
+	game->turn = 1;
+	game->winner = '\0';
+	game->cell.row = 0;
+	game->cell.col = 0;
+	for (size_t i = 0; i < 3; ++i)
+	{
+		for (size_t j = 0; j < 3; ++j)
+		{
+			game->board[i][j] = '\0';
+		}
+	}
+	get_window_size(&game->window.height, &game->window.width);
+	hide_cursor();
+	clear_screen();
+	generate_grid(game);
+	game->cursor.row = game->window.height/2 - 2;
+	game->cursor.col = game->window.width/2 - 4;
+	set_cursor_position(game->cursor.row, game->cursor.col);
+	show_cursor();
+}
+
 void run_game(void)
 {
-	char board[9] = { '\0' };
-
-	size_t win_height, win_width;
-	get_window_size(&win_height, &win_width);
-
-	size_t cursor_row, cursor_col;
-	hide_cursor();
-	generate_grid(win_height, win_width);
-	cursor_row = win_height/2 - 2;
-	cursor_col = win_width/2 - 4;
-	set_cursor_position(cursor_row, cursor_col);
-	show_cursor();
+	Game game;
+	init_game(&game);
 
 	int key;
-	int turn = 1;
-	char winner = '\0';
-	size_t cell_row = 0, cell_col = 0;
 	while (tolower(key = get_key()) != 'q')
 	{
 		switch (key)
@@ -30,108 +40,70 @@ void run_game(void)
 			case 'h':
 			case 'H':
 			case ARROW_LEFT:
-				if (cell_col > 0)
-				{
-					set_cursor_position(cursor_row,
-							cursor_col - 4);
-					cursor_col -= 4;
-					--cell_col;
-				}
+				move_cell_left(&game);
 				break;
 			case 'j':
 			case 'J':
 			case ARROW_DOWN:
-				if (cell_row < 2)
-				{
-					set_cursor_position(
-							cursor_row + 2,
-							cursor_col);
-					cursor_row += 2;
-					++cell_row;
-				}
+				move_cell_down(&game);
 				break;
 			case 'k':
 			case 'K':
 			case ARROW_UP:
-				if (cell_row > 0)
-				{
-					set_cursor_position(
-							cursor_row - 2,
-							cursor_col);
-					cursor_row -= 2;
-					--cell_row;
-				}
+				move_cell_up(&game);
 				break;
 			case 'l':
 			case 'L':
 			case ARROW_RIGHT:
-				if (cell_col < 2)
-				{
-					set_cursor_position(cursor_row,
-							cursor_col + 4);
-					cursor_col += 4;
-					++cell_col;
-				}
+				move_cell_right(&game);
 				break;
 			case ' ':
 			case ENTER:
-				if (board[3*cell_row + cell_col]
-						== '\0')
+				if (game.board[game.cell.row][game.cell.col] != '\0')
 				{
-					hide_cursor();
-					write_term("X");
-					set_cursor_position(cursor_row,
-							cursor_col);
-					show_cursor();
-					board[3*cell_row + cell_col]
-						= 'X';
-
-					if ((winner = check_winner(board)) == 'X')
-					{
-						goto SHOW_RESULTS;
-					}
-					else if (turn == 9)
-					{
-						winner = '\0';
-						goto SHOW_RESULTS;
-					}
-					++turn;
-
-					/* Opponent's turn */
-					size_t o_row, o_col;
-					make_opponent_turn(board, turn,
-							&o_row, &o_col);
-					hide_cursor();
-					set_cursor_position(win_height/2 - 2 + 2*o_row,
-							win_width/2 - 4 + 4*o_col);
-					write_term("O");
-					set_cursor_position(cursor_row,
-							cursor_col);
-					show_cursor();
-
-					if ((winner = check_winner(board)) == 'O')
-					{
-						goto SHOW_RESULTS;
-					}
-
-					++turn;
+					continue;
 				}
+				hide_cursor();
+				write_term("X");
+				set_cursor_position(game.cursor.row,
+						game.cursor.col);
+				show_cursor();
+				game.board[game.cell.row][game.cell.col]
+					= 'X';
+
+				if ((game.winner = check_winner(&game)) == 'X')
+				{
+					goto SHOW_RESULTS;
+				}
+				else if (game.turn == 9)
+				{
+					game.winner = '\0';
+					goto SHOW_RESULTS;
+				}
+				++game.turn;
+
+				make_opponent_turn(&game);
+				if ((game.winner = check_winner(&game)) == 'O')
+				{
+					goto SHOW_RESULTS;
+				}
+				++game.turn;
 				break;
 		}
 		continue;
 
 SHOW_RESULTS:
-		if (winner == '\0')
+		if (game.winner == '\0')
 		{
-			show_message("Draw", win_height, win_width);
+			show_message("Draw", &game);
 		}
-		else if (winner == 'X')
+		else if (game.winner == 'X')
 		{
-			show_message("You win", win_height, win_width);
+			show_message("You win", &game);
 		}
 		else
 		{
-			show_message("Game over", win_height, win_width);
+			show_message("Game over", &game);
 		}
 
 		if (tolower(get_key()) == 'q')
@@ -140,30 +112,59 @@ SHOW_RESULTS:
 		}
 		else
 		{
-			for (size_t i = 0; i < 9; ++i)
-			{
-				board[i] = '\0';
-			}
-			turn = 1;
-			winner = '\0';
-			cell_row = 0;
-			cell_col = 0;
-
-			clear_screen();
-			hide_cursor();
-			generate_grid(win_height, win_width);
-			cursor_row = win_height/2 - 2;
-			cursor_col = win_width/2 - 4;
-			set_cursor_position(cursor_row, cursor_col);
-			show_cursor();
+			init_game(&game);
 		}
 	}
 }
 
-void generate_grid(size_t win_height, size_t win_width)
+void move_cell_left(Game *game)
 {
-	size_t row = win_height/2 - 2;
-	size_t col = win_width/2 - 5;
+	if (game->cell.col > 0)
+	{
+		set_cursor_position(game->cursor.row,
+				game->cursor.col - 4);
+		game->cursor.col -= 4;
+		--game->cell.col;
+	}
+}
+
+void move_cell_down(Game *game)
+{
+	if (game->cell.row < 2)
+	{
+		set_cursor_position(game->cursor.row + 2,
+				game->cursor.col);
+		game->cursor.row += 2;
+		++game->cell.row;
+	}
+}
+
+void move_cell_up(Game *game)
+{
+	if (game->cell.row > 0)
+	{
+		set_cursor_position(game->cursor.row - 2,
+				game->cursor.col);
+		game->cursor.row -= 2;
+		--game->cell.row;
+	}
+}
+
+void move_cell_right(Game *game)
+{
+	if (game->cell.col < 2)
+	{
+		set_cursor_position(game->cursor.row,
+				game->cursor.col + 4);
+		game->cursor.col += 4;
+		++game->cell.col;
+	}
+}
+
+void generate_grid(Game *game)
+{
+	size_t row = game->window.height/2 - 2;
+	size_t col = game->window.width/2 - 5;
 	set_cursor_position(row, col);
 	write_term("   |   |   ");
 	set_cursor_position(row + 1, col);
@@ -176,84 +177,95 @@ void generate_grid(size_t win_height, size_t win_width)
 	write_term("   |   |   ");
 }
 
-char check_winner(char board[9])
+char check_winner(Game *game)
 {
 	/* Check horizontally */
 	for (size_t r = 0; r < 3; ++r)
 	{
-		if (board[3*r] == board[3*r + 1] &&
-				board[3*r] == board[3*r + 2])
+		if (game->board[r][0] == game->board[r][1] &&
+				game->board[r][0] == game->board[r][2])
 		{
-			return board[3*r];
+			return game->board[r][0];
 		}
 	}
 
 	/* Check vertically */
 	for (size_t c = 0; c < 3; ++c)
 	{
-		if (board[c] == board[3 + c] &&
-				board[c] == board[6 + c])
+		if (game->board[0][c] == game->board[1][c] &&
+				game->board[0][c] == game->board[2][c])
 		{
-			return board[c];
+			return game->board[0][c];
 		}
 	}
 
 	/* Check diagonally */
-	if (board[0] == board[4] && board[0] == board[8])
+	if (game->board[0][0] == game->board[1][1]
+			&& game->board[0][0] == game->board[2][2])
 	{
-		return board[0];
+		return game->board[0][0];
 	}
-	else if (board[2] == board[4] && board[2] == board[6])
+	else if (game->board[0][2] == game->board[1][1]
+			&& game->board[0][2] == game->board[2][0])
 	{
-		return board[2];
+		return game->board[0][2];
 	}
 
 	return '\0';
 }
 
-void make_opponent_turn(char board[9], int turn, size_t *o_row, size_t *o_col)
+void make_opponent_turn(Game *game)
 {
-	if (turn == 2 && board[4] == 'X')
+	size_t o_row, o_col;
+
+	if (game->turn == 2 && game->board[1][1] == 'X')
 	{
-		*o_row = 0;
-		*o_col = 0;
+		o_row = 0;
+		o_col = 0;
 	}
-	else if (turn == 2)
+	else if (game->turn == 2)
 	{
-		*o_row = 1;
-		*o_col = 1;
+		o_row = 1;
+		o_col = 1;
 	}
 	else
 	{
-		for (size_t row = 0; row < 3; ++row)
+		for (size_t r = 0; r < 3; ++r)
 		{
-			for (size_t col = 0; col < 3; ++col)
+			for (size_t c = 0; c < 3; ++c)
 			{
-				if (board[3*row + col] == '\0')
+				if (game->board[r][c] == '\0')
 				{
-					*o_row = row;
-					*o_col = col;
-					board[3*row + col] = 'X';
-					if (check_winner(board) == 'X')
+					o_row = r;
+					o_col = c;
+					game->board[r][c] = 'X';
+					if (check_winner(game) == 'X')
 					{
-						board[3*row + col] = '\0';
+						game->board[r][c] = '\0';
 						goto MAKE_MOVE;
 					}
-					board[3*row + col] = '\0';
+					game->board[r][c] = '\0';
 				}
 			}
 		}
 	}
 
 MAKE_MOVE:
-	board[(*o_row)*3 + *o_col] = 'O';
+	game->board[o_row][o_col] = 'O';
+	hide_cursor();
+	set_cursor_position(game->window.height/2 - 2 + 2*o_row,
+			game->window.width/2 - 4 + 4*o_col);
+	write_term("O");
+	set_cursor_position(game->cursor.row,
+			game->cursor.col);
+	show_cursor();
 }
 
-void show_message(const char *msg, size_t win_height, size_t win_width)
+void show_message(const char *msg, Game *game)
 {
 	hide_cursor();
-	set_cursor_position(win_height/2 - 4,
-			win_width/2 - strlen(msg)/2);
+	set_cursor_position(game->window.height/2 - 4,
+			game->window.width/2 - strlen(msg)/2);
 	write_term(msg);
 	show_cursor();
 }
